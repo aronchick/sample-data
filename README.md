@@ -6,19 +6,19 @@ Generate realistic sample log data for various systems including Industrial Cont
 
 - **Beautiful CLI** - Rich colored output with progress bars and status updates
 - **Fast** - Generate thousands of log entries in seconds
-- **uvx Compatible** - Run directly from URL with zero installation
+- **URL Executable** - Run directly from URL with zero installation
 - **Multiple Formats** - Support for syslog and Windows Event Log XML
 - **Realistic Data** - Randomized but realistic log entries
 - **Fictional Companies** - Uses fictional company names (Contoso, Fabrikam)
 
 ## Quick Start
 
-### Run with uvx (Recommended)
+### Run from URL (Recommended)
 
 Run directly from GitHub Pages without cloning:
 
 ```bash
-uvx https://aronchick.github.io/sample-data/generate.py
+uv run https://aronchick.github.io/sample-data/generate.py
 ```
 
 ### Run Locally

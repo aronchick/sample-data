@@ -301,16 +301,18 @@ def create_parser() -> argparse.ArgumentParser:
         epilog="""
 Examples:
   # Generate 10,000 industrial control system syslog entries (default)
-  %(prog)s
+  uv run https://aronchick.github.io/sample-data/generate.py
 
   # Generate Windows Event Logs
-  %(prog)s windows
+  uv run https://aronchick.github.io/sample-data/generate.py windows
 
   # Generate 50,000 cloud manager logs to custom file
-  %(prog)s cloud-mgr -o cloud.log -n 50000
+  uv run https://aronchick.github.io/sample-data/generate.py \\
+      cloud-mgr -o cloud.log -n 50000
 
   # Generate hypervisor logs
-  %(prog)s hypervisor -o hypervisor.log
+  uv run https://aronchick.github.io/sample-data/generate.py \\
+      hypervisor -o hypervisor.log
 
 Available source types:
   industrial  - Industrial control system syslog (Contoso Manufacturing)
