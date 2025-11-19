@@ -385,7 +385,7 @@
 
             <div class="example">
                 <div class="example-desc">
-                    Show help and all options:
+                    Stream to stdout (for piping to other commands):
                 </div>
                 <div class="code-block">
                     <button class="copy-btn"
@@ -393,6 +393,20 @@
                         Copy
                     </button>
                     <code id="ex5">uv run https://aronchick.github.io/sample-data/generate.py \
+    industrial -o - -n 100 | grep "ERROR"</code>
+                </div>
+            </div>
+
+            <div class="example">
+                <div class="example-desc">
+                    Show help and all options:
+                </div>
+                <div class="code-block">
+                    <button class="copy-btn"
+                            onclick="copyToClipboard('ex6')">
+                        Copy
+                    </button>
+                    <code id="ex6">uv run https://aronchick.github.io/sample-data/generate.py \
     --help</code>
                 </div>
             </div>
@@ -418,13 +432,16 @@
                         Real-time progress tracking with estimated completion
                     </li>
                     <li style="margin: 0.5rem 0;">
+                        Stream to stdout for piping to other commands
+                    </li>
+                    <li style="margin: 0.5rem 0;">
                         Configurable output file and line count
                     </li>
                     <li style="margin: 0.5rem 0;">
                         Realistic timestamps and randomized data
                     </li>
                     <li style="margin: 0.5rem 0;">
-                        Zero installation with uvx - run directly from URL
+                        Zero installation - run directly from URL
                     </li>
                 </ul>
             </div>

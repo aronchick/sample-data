@@ -207,12 +207,12 @@ def generate_logs(
     lines: int,
 ) -> None:
     """
-    Generate log entries and write them to the output file.
+    Generate log entries and write them to the output file or stdout.
 
     Args:
         source: Type of log source (industrial, windows, cloud-mgr,
                 hypervisor)
-        outfile: Path to the output file
+        outfile: Path to the output file (use Path('-') for stdout)
         lines: Number of log lines to generate
     """
     generators = {
@@ -223,71 +223,88 @@ def generate_logs(
     }
 
     generator = generators[source]
+    use_stdout = str(outfile) == "-"
 
-    # Show configuration
-    config_table = Table(show_header=False, box=None, padding=(0, 2))
-    config_table.add_column(style="cyan bold")
-    config_table.add_column(style="white")
-    config_table.add_row("Source Type:", source)
-    config_table.add_row("Output File:", str(outfile))
-    config_table.add_row("Lines:", f"{lines:,}")
+    # Show configuration only if not streaming to stdout
+    if not use_stdout:
+        config_table = Table(show_header=False, box=None, padding=(0, 2))
+        config_table.add_column(style="cyan bold")
+        config_table.add_column(style="white")
+        config_table.add_row("Source Type:", source)
+        config_table.add_row("Output File:", str(outfile))
+        config_table.add_row("Lines:", f"{lines:,}")
 
-    console.print()
-    console.print(
-        Panel(
-            config_table,
-            title="[bold cyan]Log Generator Configuration[/bold cyan]",
-            border_style="cyan",
+        console.print()
+        console.print(
+            Panel(
+                config_table,
+                title="[bold cyan]Log Generator Configuration[/bold cyan]",
+                border_style="cyan",
+            )
         )
-    )
-    console.print()
+        console.print()
 
-    # Generate logs with progress bar
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
-        TaskProgressColumn(),
-        TextColumn("[cyan]{task.completed:,}/{task.total:,} lines[/cyan]"),
-        TimeElapsedColumn(),
-        console=console,
-    ) as progress:
-        task = progress.add_task(
-            f"[cyan]Generating {source} logs...", total=lines
-        )
+    # Generate logs
+    if use_stdout:
+        # Stream directly to stdout without progress bar
+        import sys
 
-        with outfile.open("w") as f:
-            for i in range(lines):
-                line = generator()
-                f.write(line)
-                if source == "windows":
+        for i in range(lines):
+            line = generator()
+            sys.stdout.write(line)
+            if source == "windows":
+                sys.stdout.write("\n")
+            sys.stdout.write("\n")
+            sys.stdout.flush()
+    else:
+        # Write to file with progress bar
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TaskProgressColumn(),
+            TextColumn("[cyan]{task.completed:,}/{task.total:,} lines[/cyan]"),
+            TimeElapsedColumn(),
+            console=console,
+        ) as progress:
+            task = progress.add_task(
+                f"[cyan]Generating {source} logs...", total=lines
+            )
+
+            with outfile.open("w") as f:
+                for i in range(lines):
+                    line = generator()
+                    f.write(line)
+                    if source == "windows":
+                        f.write("\n")
                     f.write("\n")
-                f.write("\n")
 
-                # Update progress every 100 lines to reduce overhead
-                if i % 100 == 0 or i == lines - 1:
-                    progress.update(task, completed=i + 1)
+                    # Update progress every 100 lines to reduce overhead
+                    if i % 100 == 0 or i == lines - 1:
+                        progress.update(task, completed=i + 1)
 
-    # Show summary
-    file_size = outfile.stat().st_size
-    size_mb = file_size / (1024 * 1024)
+        # Show summary
+        file_size = outfile.stat().st_size
+        size_mb = file_size / (1024 * 1024)
 
-    summary_table = Table(show_header=False, box=None, padding=(0, 2))
-    summary_table.add_column(style="green bold")
-    summary_table.add_column(style="white")
-    summary_table.add_row("Lines Generated:", f"{lines:,}")
-    summary_table.add_row("File Size:", f"{size_mb:.2f} MB ({file_size:,} bytes)")
-    summary_table.add_row("Output:", str(outfile.absolute()))
-
-    console.print()
-    console.print(
-        Panel(
-            summary_table,
-            title="[bold green]\u2713 Generation Complete[/bold green]",
-            border_style="green",
+        summary_table = Table(show_header=False, box=None, padding=(0, 2))
+        summary_table.add_column(style="green bold")
+        summary_table.add_column(style="white")
+        summary_table.add_row("Lines Generated:", f"{lines:,}")
+        summary_table.add_row(
+            "File Size:", f"{size_mb:.2f} MB ({file_size:,} bytes)"
         )
-    )
-    console.print()
+        summary_table.add_row("Output:", str(outfile.absolute()))
+
+        console.print()
+        console.print(
+            Panel(
+                summary_table,
+                title="[bold green]\u2713 Generation Complete[/bold green]",
+                border_style="green",
+            )
+        )
+        console.print()
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -314,6 +331,10 @@ Examples:
   uv run https://aronchick.github.io/sample-data/generate.py \\
       hypervisor -o hypervisor.log
 
+  # Stream industrial logs to stdout (for piping)
+  uv run https://aronchick.github.io/sample-data/generate.py \\
+      industrial -o - -n 100
+
 Available source types:
   industrial  - Industrial control system syslog (Contoso Manufacturing)
   windows     - Windows Event Logs (XML format)
@@ -335,7 +356,7 @@ Available source types:
         "--output",
         type=Path,
         default=Path("logs.out"),
-        help="Output file path (default: logs.out)",
+        help="Output file path, use '-' for stdout (default: logs.out)",
     )
 
     parser.add_argument(

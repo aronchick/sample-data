@@ -63,6 +63,15 @@ uv run --script generate.py industrial -o custom.log -n 50000
 # Generate 100,000 Windows Event Logs
 uv run --script generate.py windows -o windows-events.xml -n 100000
 
+# Stream to stdout (for piping to other commands)
+uv run --script generate.py industrial -o - -n 100
+
+# Pipe to grep for filtering
+uv run --script generate.py industrial -o - -n 1000 | grep "ERROR"
+
+# Pipe to another log processor
+uv run --script generate.py cloud-mgr -o - -n 5000 | gzip > logs.gz
+
 # Show help and all options
 uv run --script generate.py --help
 ```
