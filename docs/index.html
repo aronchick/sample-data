@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sample Data Generator - Generate Realistic Log Data</title>
+    <meta name="description" content="Generate realistic sample log data for Siemens, Windows, vCenter, and ESXi systems. Easy one-line installation with uvx.">
+    <style>
+        :root {
+            --bg-primary: #0d1117;
+            --bg-secondary: #161b22;
+            --bg-tertiary: #1f2937;
+            --text-primary: #c9d1d9;
+            --text-secondary: #8b949e;
+            --accent-blue: #58a6ff;
+            --accent-green: #3fb950;
+            --accent-purple: #bc8cff;
+            --accent-orange: #f0883e;
+            --border-color: #30363d;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI',
+                         'Noto Sans', Helvetica, Arial, sans-serif;
+            background: linear-gradient(135deg, #0d1117 0%, #161b22 100%);
+            color: var(--text-primary);
+            line-height: 1.6;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        header {
+            text-align: center;
+            padding: 3rem 0;
+        }
+
+        h1 {
+            font-size: 3.5rem;
+            background: linear-gradient(135deg, var(--accent-blue),
+                                       var(--accent-purple));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 1rem;
+            font-weight: 800;
+        }
+
+        .tagline {
+            font-size: 1.5rem;
+            color: var(--text-secondary);
+            margin-bottom: 2rem;
+        }
+
+        .hero-section {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 2.5rem;
+            margin: 2rem 0;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+        }
+
+        .install-box {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin: 2rem 0;
+            position: relative;
+        }
+
+        .install-title {
+            color: var(--accent-green);
+            font-weight: 600;
+            margin-bottom: 1rem;
+            font-size: 1.2rem;
+        }
+
+        .code-block {
+            background: #0d1117;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 1rem 1.5rem;
+            font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+            font-size: 0.95rem;
+            color: var(--accent-blue);
+            overflow-x: auto;
+            position: relative;
+            margin: 0.5rem 0;
+        }
+
+        .code-block code {
+            white-space: pre;
+        }
+
+        .copy-btn {
+            position: absolute;
+            top: 0.5rem;
+            right: 0.5rem;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            padding: 0.4rem 0.8rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: all 0.2s;
+        }
+
+        .copy-btn:hover {
+            background: var(--bg-tertiary);
+            color: var(--accent-blue);
+            border-color: var(--accent-blue);
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.5rem;
+            margin: 3rem 0;
+        }
+
+        .feature-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 2rem;
+            transition: transform 0.2s, border-color 0.2s;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-4px);
+            border-color: var(--accent-blue);
+        }
+
+        .feature-icon {
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .feature-title {
+            color: var(--text-primary);
+            font-size: 1.3rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+
+        .feature-desc {
+            color: var(--text-secondary);
+            font-size: 1rem;
+        }
+
+        .examples-section {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 2.5rem;
+            margin: 3rem 0;
+        }
+
+        .section-title {
+            font-size: 2rem;
+            color: var(--text-primary);
+            margin-bottom: 2rem;
+            text-align: center;
+        }
+
+        .example {
+            margin: 1.5rem 0;
+        }
+
+        .example-desc {
+            color: var(--text-secondary);
+            margin-bottom: 0.5rem;
+            font-size: 0.95rem;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 0.3rem 0.8rem;
+            border-radius: 16px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            margin-right: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .badge-siemens {
+            background: rgba(88, 166, 255, 0.2);
+            color: var(--accent-blue);
+        }
+        .badge-windows {
+            background: rgba(188, 140, 255, 0.2);
+            color: var(--accent-purple);
+        }
+        .badge-vcenter {
+            background: rgba(63, 185, 80, 0.2);
+            color: var(--accent-green);
+        }
+        .badge-esxi {
+            background: rgba(240, 136, 62, 0.2);
+            color: var(--accent-orange);
+        }
+
+        footer {
+            text-align: center;
+            padding: 3rem 0;
+            color: var(--text-secondary);
+            border-top: 1px solid var(--border-color);
+            margin-top: 4rem;
+        }
+
+        a {
+            color: var(--accent-blue);
+            text-decoration: none;
+        }
+
+        a:hover {
+            text-decoration: underline;
+        }
+
+        .url-display {
+            background: rgba(88, 166, 255, 0.1);
+            border: 1px solid var(--accent-blue);
+            border-radius: 6px;
+            padding: 0.5rem 1rem;
+            color: var(--accent-blue);
+            font-family: 'SF Mono', Monaco, monospace;
+            font-size: 0.9rem;
+            text-align: center;
+            margin: 1rem 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Sample Data Generator</h1>
+            <p class="tagline">
+                Generate realistic log data for Industrial Control Systems,
+                Windows, Cloud Manager, and Hypervisor systems
+            </p>
+        </header>
+
+        <div class="hero-section">
+            <div class="install-box">
+                <div class="install-title">
+                    ✨ One-Line Installation (with uvx)
+                </div>
+                <div class="code-block">
+                    <button class="copy-btn"
+                            onclick="copyToClipboard('uvx-cmd')">
+                        Copy
+                    </button>
+                    <code id="uvx-cmd">uvx https://aronchick.github.io/sample-data/generate.py</code>
+                </div>
+                <p style="color: var(--text-secondary); margin-top: 1rem;
+                          font-size: 0.9rem;">
+                    Run directly from GitHub Pages - no installation required!
+                </p>
+            </div>
+
+            <div class="install-box">
+                <div class="install-title">
+                    📥 Or Run Locally
+                </div>
+                <div class="code-block">
+                    <button class="copy-btn"
+                            onclick="copyToClipboard('local-cmd')">
+                        Copy
+                    </button>
+                    <code id="local-cmd">uv run --script generate.py</code>
+                </div>
+            </div>
+        </div>
+
+        <h2 class="section-title">Supported Log Types</h2>
+        <div class="features-grid">
+            <div class="feature-card">
+                <div class="feature-icon">🏭</div>
+                <div class="feature-title">Industrial Control Systems</div>
+                <div class="feature-desc">
+                    Contoso Manufacturing syslog entries with port states,
+                    errors, and security alerts
+                </div>
+            </div>
+
+            <div class="feature-card">
+                <div class="feature-icon">🪟</div>
+                <div class="feature-title">Windows Event Logs</div>
+                <div class="feature-desc">
+                    XML-formatted Windows Security and System event logs
+                    with authentication events
+                </div>
+            </div>
+
+            <div class="feature-card">
+                <div class="feature-icon">☁️</div>
+                <div class="feature-title">Cloud Manager</div>
+                <div class="feature-desc">
+                    Fabrikam Cloud Manager operations including VM power
+                    states, migrations, and snapshots
+                </div>
+            </div>
+
+            <div class="feature-card">
+                <div class="feature-icon">🖥️</div>
+                <div class="feature-title">Hypervisor</div>
+                <div class="feature-desc">
+                    Fabrikam Hypervisor logs from hvkernel, hostd, and
+                    mgmtd components
+                </div>
+            </div>
+        </div>
+
+        <div class="examples-section">
+            <h2 class="section-title">Usage Examples</h2>
+
+            <div class="example">
+                <div class="example-desc">
+                    Generate 10,000 industrial control system syslog
+                    entries (default):
+                </div>
+                <div class="code-block">
+                    <button class="copy-btn"
+                            onclick="copyToClipboard('ex1')">
+                        Copy
+                    </button>
+                    <code id="ex1">uv run --script generate.py</code>
+                </div>
+            </div>
+
+            <div class="example">
+                <div class="example-desc">
+                    Generate Windows Event Logs:
+                </div>
+                <div class="code-block">
+                    <button class="copy-btn"
+                            onclick="copyToClipboard('ex2')">
+                        Copy
+                    </button>
+                    <code id="ex2">uv run --script generate.py windows</code>
+                </div>
+            </div>
+
+            <div class="example">
+                <div class="example-desc">
+                    Generate 50,000 cloud manager logs to custom file:
+                </div>
+                <div class="code-block">
+                    <button class="copy-btn"
+                            onclick="copyToClipboard('ex3')">
+                        Copy
+                    </button>
+                    <code id="ex3">uvx https://aronchick.github.io/sample-data/generate.py \
+    cloud-mgr -o cloud.log -n 50000</code>
+                </div>
+            </div>
+
+            <div class="example">
+                <div class="example-desc">
+                    Generate hypervisor logs:
+                </div>
+                <div class="code-block">
+                    <button class="copy-btn"
+                            onclick="copyToClipboard('ex4')">
+                        Copy
+                    </button>
+                    <code id="ex4">uvx https://aronchick.github.io/sample-data/generate.py \
+    hypervisor -o hypervisor.log</code>
+                </div>
+            </div>
+
+            <div class="example">
+                <div class="example-desc">
+                    Show help and all options:
+                </div>
+                <div class="code-block">
+                    <button class="copy-btn"
+                            onclick="copyToClipboard('ex5')">
+                        Copy
+                    </button>
+                    <code id="ex5">uv run --script generate.py --help</code>
+                </div>
+            </div>
+        </div>
+
+        <div class="hero-section">
+            <h2 class="section-title">Features</h2>
+            <div style="padding: 0 2rem;">
+                <div style="margin: 1rem 0;">
+                    <span class="badge badge-siemens">Rich CLI</span>
+                    <span class="badge badge-windows">Progress Bars</span>
+                    <span class="badge badge-vcenter">Colored Output</span>
+                    <span class="badge badge-esxi">uvx Compatible</span>
+                    <span class="badge badge-siemens">Fictional Companies</span>
+                </div>
+                <ul style="list-style-position: inside;
+                           color: var(--text-secondary);
+                           margin: 1.5rem 0;">
+                    <li style="margin: 0.5rem 0;">
+                        Beautiful colored terminal output with Rich library
+                    </li>
+                    <li style="margin: 0.5rem 0;">
+                        Real-time progress tracking with estimated completion
+                    </li>
+                    <li style="margin: 0.5rem 0;">
+                        Configurable output file and line count
+                    </li>
+                    <li style="margin: 0.5rem 0;">
+                        Realistic timestamps and randomized data
+                    </li>
+                    <li style="margin: 0.5rem 0;">
+                        Zero installation with uvx - run directly from URL
+                    </li>
+                </ul>
+            </div>
+        </div>
+
+        <footer>
+            <p>
+                Built with Python and Rich |
+                <a href="https://github.com/astral-sh/uv"
+                   target="_blank">Powered by uv</a> |
+                Uses fictional company names (Contoso, Fabrikam)
+            </p>
+        </footer>
+    </div>
+
+    <script>
+        function copyToClipboard(elementId) {
+            const element = document.getElementById(elementId);
+            const text = element.textContent;
+
+            navigator.clipboard.writeText(text).then(() => {
+                const btn = element.parentElement.querySelector('.copy-btn');
+                const originalText = btn.textContent;
+                btn.textContent = 'Copied!';
+                btn.style.color = 'var(--accent-green)';
+                btn.style.borderColor = 'var(--accent-green)';
+
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                    btn.style.color = '';
+                    btn.style.borderColor = '';
+                }, 2000);
+            }).catch(err => {
+                console.error('Failed to copy:', err);
+            });
+        }
+    </script>
+</body>
+</html>
