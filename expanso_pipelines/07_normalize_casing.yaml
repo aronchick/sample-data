@@ -1,0 +1,79 @@
+# =============================================================================
+# Pipeline: Normalize String Casing
+# =============================================================================
+# Problem: Same data stored with different casing (JOHN, john, John, jOhN)
+# Solution: Apply consistent casing rules using Bloblang string functions
+#
+# Expanso Features Demonstrated:
+# - Bloblang string manipulation functions
+# - Conditional transformations
+# - Data standardization patterns
+# =============================================================================
+
+input:
+  sql_select:
+    driver: postgres
+    dsn: "postgres://${DB_USER:workshop}:${DB_PASS:workshop123}@${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:workshop}?sslmode=disable"
+    table: bad_data_workshop.contacts_bad_casing
+    columns:
+      - contact_id
+      - first_name
+      - last_name
+      - email
+      - company
+      - country
+
+pipeline:
+  processors:
+    - mapping: |
+        root.contact_id = this.contact_id
+
+        # Names: Title Case (first letter uppercase, rest lowercase)
+        root.first_name = this.first_name.capitalize()
+        root.last_name = this.last_name.capitalize()
+
+        # Email: Always lowercase
+        root.email = this.email.lowercase()
+
+        # Company: Title Case for each word
+        # Split by space, capitalize each word, rejoin
+        let company_words = this.company.split(" ")
+        root.company = $company_words.map_each(word -> word.capitalize()).join(" ")
+
+        # Country: Uppercase (standard for country codes/names)
+        root.country = this.country.uppercase()
+
+        # Track what was normalized
+        root.normalization_applied = {
+          "first_name": this.first_name != root.first_name,
+          "last_name": this.last_name != root.last_name,
+          "email": this.email != root.email,
+          "company": this.company != root.company,
+          "country": this.country != root.country
+        }
+
+    # Remove normalization tracking before output
+    - mapping: |
+        root = this.without("normalization_applied")
+
+output:
+  sql_insert:
+    driver: postgres
+    dsn: "postgres://${DB_USER:workshop}:${DB_PASS:workshop123}@${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:workshop}?sslmode=disable"
+    table: bad_data_workshop_clean.contacts_normalized
+    columns:
+      - contact_id
+      - first_name
+      - last_name
+      - email
+      - company
+      - country
+    args_mapping: |
+      root = [
+        this.contact_id,
+        this.first_name,
+        this.last_name,
+        this.email,
+        this.company,
+        this.country
+      ]

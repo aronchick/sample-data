@@ -1,0 +1,123 @@
+# =============================================================================
+# Pipeline: Fix Wrong Data Types
+# =============================================================================
+# Problem: Dates and numbers stored as VARCHAR strings with inconsistent formats
+# Solution: Parse strings, convert to proper types, write to typed destination
+#
+# Expanso Features Demonstrated:
+# - sql_select input (read from database)
+# - mapping processor (Bloblang transformations)
+# - try/catch error handling
+# - sql_insert output (write to clean table)
+# - switch for content routing (valid vs invalid)
+# =============================================================================
+
+input:
+  sql_select:
+    driver: postgres
+    dsn: "postgres://${DB_USER:workshop}:${DB_PASS:workshop123}@${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:workshop}?sslmode=disable"
+    table: bad_data_workshop.transactions_bad_types
+    columns:
+      - transaction_id
+      - amount
+      - transaction_date
+      - quantity
+      - is_refund
+      - customer_age
+
+pipeline:
+  processors:
+    # Step 1: Parse and convert data types using Bloblang
+    - mapping: |
+        # Keep original values for debugging
+        root.original = this
+
+        # Parse transaction_id (string -> integer)
+        root.transaction_id = this.transaction_id.number().catch(0)
+
+        # Parse amount - handle $, commas, varying decimal places
+        let cleaned_amount = this.amount.re_replace_all("[$,]", "")
+        root.amount = $cleaned_amount.number().catch(0.0)
+
+        # Parse date - try multiple formats
+        root.transaction_date = this.transaction_date.ts_parse("2006-01-02").catch(
+          this.transaction_date.ts_parse("01/02/2006").catch(
+            this.transaction_date.ts_parse("02-01-2006").catch(
+              this.transaction_date.ts_parse("January 02, 2006").catch(
+                this.transaction_date.ts_parse("20060102").catch(
+                  now()
+                )
+              )
+            )
+          )
+        )
+
+        # Parse quantity
+        root.quantity = this.quantity.number().catch(0)
+
+        # Parse boolean - handle various string representations
+        let bool_str = this.is_refund.lowercase()
+        root.is_refund = if $bool_str == "true" || $bool_str == "1" || $bool_str == "yes" {
+          true
+        } else {
+          false
+        }
+
+        # Parse age
+        root.customer_age = this.customer_age.number().catch(0)
+
+        # Mark if parsing had issues
+        root.had_parsing_errors = (root.transaction_id == 0 && this.transaction_id != "0") ||
+                                   (root.amount == 0.0 && this.amount != "0")
+
+    # Step 2: Route based on parsing success
+    - switch:
+        - check: this.had_parsing_errors == true
+          processors:
+            - mapping: |
+                root.rejection_reason = "Failed to parse one or more fields"
+                root.rejected_at = now()
+                root.original_record = this.original
+
+output:
+  switch:
+    # Route successfully parsed records to clean table
+    - check: this.had_parsing_errors == false
+      output:
+        sql_insert:
+          driver: postgres
+          dsn: "postgres://${DB_USER:workshop}:${DB_PASS:workshop123}@${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:workshop}?sslmode=disable"
+          table: bad_data_workshop_clean.transactions_typed
+          columns:
+            - transaction_id
+            - amount
+            - transaction_date
+            - quantity
+            - is_refund
+            - customer_age
+          args_mapping: |
+            root = [
+              this.transaction_id,
+              this.amount,
+              this.transaction_date,
+              this.quantity,
+              this.is_refund,
+              this.customer_age
+            ]
+
+    # Route failed records to dead letter table
+    - output:
+        sql_insert:
+          driver: postgres
+          dsn: "postgres://${DB_USER:workshop}:${DB_PASS:workshop123}@${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:workshop}?sslmode=disable"
+          table: bad_data_workshop_rejected.transactions_parse_failures
+          columns:
+            - original_data
+            - rejection_reason
+            - rejected_at
+          args_mapping: |
+            root = [
+              this.original_record.format_json(),
+              this.rejection_reason,
+              this.rejected_at
+            ]

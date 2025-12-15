@@ -1,0 +1,72 @@
+# =============================================================================
+# Pipeline: Deduplicate Records
+# =============================================================================
+# Problem: Same users stored multiple times with no unique constraints
+# Solution: Use Expanso's dedupe processor with cache to remove duplicates
+#
+# Expanso Features Demonstrated:
+# - dedupe processor (built-in deduplication)
+# - cache resource (in-memory storage for seen keys)
+# - mapping for composite key generation
+# =============================================================================
+
+input:
+  sql_select:
+    driver: postgres
+    dsn: "postgres://${DB_USER:workshop}:${DB_PASS:workshop123}@${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:workshop}?sslmode=disable"
+    table: bad_data_workshop.users_duplicates
+    columns:
+      - row_id
+      - user_id
+      - username
+      - email
+      - phone
+      - created_at
+
+pipeline:
+  processors:
+    # Step 1: Generate a composite deduplication key
+    # We dedupe on user_id + email to identify true duplicates
+    - mapping: |
+        root = this
+        root.dedupe_key = "%s_%s".format(this.user_id, this.email.lowercase())
+
+    # Step 2: Deduplicate using the generated key
+    # Messages with duplicate keys are dropped
+    - dedupe:
+        cache: user_dedupe_cache
+        key: ${! this.dedupe_key }
+        drop_on_err: true
+
+    # Step 3: Clean up - remove the temporary dedupe key
+    - mapping: |
+        root = this.without("dedupe_key")
+
+output:
+  sql_insert:
+    driver: postgres
+    dsn: "postgres://${DB_USER:workshop}:${DB_PASS:workshop123}@${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:workshop}?sslmode=disable"
+    table: bad_data_workshop_clean.users_unique
+    columns:
+      - user_id
+      - username
+      - email
+      - phone
+      - created_at
+    args_mapping: |
+      root = [
+        this.user_id,
+        this.username,
+        this.email,
+        this.phone,
+        this.created_at
+      ]
+
+# Cache resource for deduplication
+cache_resources:
+  - label: user_dedupe_cache
+    memory:
+      # TTL should be longer than the pipeline run time
+      default_ttl: 1h
+      # Optimize for large datasets
+      compaction_interval: 60s

@@ -1,0 +1,66 @@
+# =============================================================================
+# Pipeline: Trim Whitespace
+# =============================================================================
+# Problem: Fields contain invisible whitespace that breaks joins and lookups
+# Solution: Trim all string fields systematically
+#
+# Expanso Features Demonstrated:
+# - Bloblang trim() and other string cleaning functions
+# - Handling tabs, newlines, and various whitespace
+# =============================================================================
+
+input:
+  sql_select:
+    driver: postgres
+    dsn: "postgres://${DB_USER:workshop}:${DB_PASS:workshop123}@${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:workshop}?sslmode=disable"
+    table: bad_data_workshop.inventory_whitespace
+    columns:
+      - sku
+      - product_name
+      - category
+      - supplier
+      - warehouse_location
+
+pipeline:
+  processors:
+    - mapping: |
+        # Trim all string fields - removes leading/trailing whitespace
+        # Also replace internal tabs/newlines with spaces
+        root.sku = this.sku.trim().re_replace_all("[\t\n\r]+", " ")
+        root.product_name = this.product_name.trim().re_replace_all("[\t\n\r]+", " ")
+        root.category = this.category.trim().re_replace_all("[\t\n\r]+", " ")
+        root.supplier = this.supplier.trim().re_replace_all("[\t\n\r]+", " ")
+        root.warehouse_location = this.warehouse_location.trim().re_replace_all("[\t\n\r]+", " ")
+
+        # Track cleaning stats
+        root.bytes_trimmed = (
+          (this.sku.length() - root.sku.length()) +
+          (this.product_name.length() - root.product_name.length()) +
+          (this.category.length() - root.category.length()) +
+          (this.supplier.length() - root.supplier.length()) +
+          (this.warehouse_location.length() - root.warehouse_location.length())
+        )
+
+    # Remove stats before final output
+    - mapping: |
+        root = this.without("bytes_trimmed")
+
+output:
+  sql_insert:
+    driver: postgres
+    dsn: "postgres://${DB_USER:workshop}:${DB_PASS:workshop123}@${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:workshop}?sslmode=disable"
+    table: bad_data_workshop_clean.inventory_trimmed
+    columns:
+      - sku
+      - product_name
+      - category
+      - supplier
+      - warehouse_location
+    args_mapping: |
+      root = [
+        this.sku,
+        this.product_name,
+        this.category,
+        this.supplier,
+        this.warehouse_location
+      ]

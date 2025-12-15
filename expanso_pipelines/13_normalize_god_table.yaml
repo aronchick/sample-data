@@ -1,0 +1,253 @@
+# =============================================================================
+# Pipeline: Normalize God Table (Branch Processing)
+# =============================================================================
+# Problem: One massive denormalized table with 30+ columns, data redundancy
+# Solution: Use branch processor to split into normalized tables simultaneously
+#
+# Expanso Features Demonstrated:
+# - branch processor (parallel processing paths)
+# - Multiple simultaneous transformations
+# - Dedupe for extracting unique entities
+# - Creating normalized relational structure
+# =============================================================================
+
+input:
+  sql_select:
+    driver: postgres
+    dsn: "postgres://${DB_USER:workshop}:${DB_PASS:workshop123}@${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:workshop}?sslmode=disable"
+    table: bad_data_workshop.god_table
+    columns:
+      - id
+      - customer_id
+      - customer_first_name
+      - customer_last_name
+      - customer_email
+      - customer_phone
+      - customer_address_line1
+      - customer_address_line2
+      - customer_city
+      - customer_state
+      - customer_zip
+      - customer_country
+      - customer_created_at
+      - order_id
+      - order_date
+      - order_status
+      - order_total
+      - order_shipping_cost
+      - order_tax
+      - product_id
+      - product_name
+      - product_description
+      - product_category
+      - product_subcategory
+      - product_brand
+      - product_unit_price
+      - product_cost
+      - quantity
+      - line_total
+      - shipping_carrier
+      - shipping_tracking
+      - shipping_method
+      - estimated_delivery
+      - actual_delivery
+
+pipeline:
+  processors:
+    # Branch processor runs multiple pipelines in parallel on the same message
+    - branch:
+        processors:
+          # Branch 1: Extract unique customers
+          - mapping: |
+              root.entity_type = "customer"
+              root.customer_id = this.customer_id
+              root.first_name = this.customer_first_name
+              root.last_name = this.customer_last_name
+              root.email = this.customer_email
+              root.phone = this.customer_phone
+              root.address_line1 = this.customer_address_line1
+              root.address_line2 = this.customer_address_line2
+              root.city = this.customer_city
+              root.state = this.customer_state
+              root.zip = this.customer_zip
+              root.country = this.customer_country
+              root.created_at = this.customer_created_at
+        result_map: |
+          root.customer = this
+
+    - branch:
+        processors:
+          # Branch 2: Extract unique products
+          - mapping: |
+              root.entity_type = "product"
+              root.product_id = this.product_id
+              root.name = this.product_name
+              root.description = this.product_description
+              root.category = this.product_category
+              root.subcategory = this.product_subcategory
+              root.brand = this.product_brand
+              root.unit_price = this.product_unit_price
+              root.cost = this.product_cost
+        result_map: |
+          root.product = this
+
+    - branch:
+        processors:
+          # Branch 3: Extract orders
+          - mapping: |
+              root.entity_type = "order"
+              root.order_id = this.order_id
+              root.customer_id = this.customer_id
+              root.order_date = this.order_date
+              root.status = this.order_status
+              root.total = this.order_total
+              root.shipping_cost = this.order_shipping_cost
+              root.tax = this.order_tax
+              root.shipping_carrier = this.shipping_carrier
+              root.shipping_tracking = this.shipping_tracking
+              root.shipping_method = this.shipping_method
+              root.estimated_delivery = this.estimated_delivery
+              root.actual_delivery = this.actual_delivery
+        result_map: |
+          root.order = this
+
+    - branch:
+        processors:
+          # Branch 4: Extract order line items
+          - mapping: |
+              root.entity_type = "line_item"
+              root.order_id = this.order_id
+              root.product_id = this.product_id
+              root.quantity = this.quantity
+              root.unit_price = this.product_unit_price
+              root.line_total = this.line_total
+        result_map: |
+          root.line_item = this
+
+output:
+  # Output all extracted entities to their respective tables
+  broker:
+    pattern: fan_out
+    outputs:
+      # Customers (with deduplication)
+      - mapping: |
+          root = this.customer
+        processors:
+          - dedupe:
+              cache: customer_cache
+              key: ${! this.customer_id }
+        output:
+          sql_insert:
+            driver: postgres
+            dsn: "postgres://${DB_USER:workshop}:${DB_PASS:workshop123}@${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:workshop}?sslmode=disable"
+            table: bad_data_workshop_clean.customers_normalized
+            columns:
+              - customer_id
+              - first_name
+              - last_name
+              - email
+              - phone
+              - address_line1
+              - address_line2
+              - city
+              - state
+              - zip
+              - country
+              - created_at
+            args_mapping: |
+              root = [
+                this.customer_id, this.first_name, this.last_name, this.email,
+                this.phone, this.address_line1, this.address_line2, this.city,
+                this.state, this.zip, this.country, this.created_at
+              ]
+
+      # Products (with deduplication)
+      - mapping: |
+          root = this.product
+        processors:
+          - dedupe:
+              cache: product_cache
+              key: ${! this.product_id }
+        output:
+          sql_insert:
+            driver: postgres
+            dsn: "postgres://${DB_USER:workshop}:${DB_PASS:workshop123}@${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:workshop}?sslmode=disable"
+            table: bad_data_workshop_clean.products_normalized
+            columns:
+              - product_id
+              - name
+              - description
+              - category
+              - subcategory
+              - brand
+              - unit_price
+              - cost
+            args_mapping: |
+              root = [
+                this.product_id, this.name, this.description, this.category,
+                this.subcategory, this.brand, this.unit_price, this.cost
+              ]
+
+      # Orders (with deduplication)
+      - mapping: |
+          root = this.order
+        processors:
+          - dedupe:
+              cache: order_cache
+              key: ${! this.order_id }
+        output:
+          sql_insert:
+            driver: postgres
+            dsn: "postgres://${DB_USER:workshop}:${DB_PASS:workshop123}@${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:workshop}?sslmode=disable"
+            table: bad_data_workshop_clean.orders_normalized
+            columns:
+              - order_id
+              - customer_id
+              - order_date
+              - status
+              - total
+              - shipping_cost
+              - tax
+              - shipping_carrier
+              - shipping_tracking
+              - shipping_method
+              - estimated_delivery
+              - actual_delivery
+            args_mapping: |
+              root = [
+                this.order_id, this.customer_id, this.order_date, this.status,
+                this.total, this.shipping_cost, this.tax, this.shipping_carrier,
+                this.shipping_tracking, this.shipping_method,
+                this.estimated_delivery, this.actual_delivery
+              ]
+
+      # Order Line Items (no deduplication - each row is unique)
+      - mapping: |
+          root = this.line_item
+        output:
+          sql_insert:
+            driver: postgres
+            dsn: "postgres://${DB_USER:workshop}:${DB_PASS:workshop123}@${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:workshop}?sslmode=disable"
+            table: bad_data_workshop_clean.order_line_items
+            columns:
+              - order_id
+              - product_id
+              - quantity
+              - unit_price
+              - line_total
+            args_mapping: |
+              root = [
+                this.order_id, this.product_id, this.quantity,
+                this.unit_price, this.line_total
+              ]
+
+cache_resources:
+  - label: customer_cache
+    memory:
+      default_ttl: 1h
+  - label: product_cache
+    memory:
+      default_ttl: 1h
+  - label: order_cache
+    memory:
+      default_ttl: 1h

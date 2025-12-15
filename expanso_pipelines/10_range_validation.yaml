@@ -1,0 +1,173 @@
+# =============================================================================
+# Pipeline: Range Validation & Multi-Destination Routing
+# =============================================================================
+# Problem: Out-of-range values (negative prices, future dates, impossible ages)
+# Solution: Validate business rules and route to multiple destinations
+#
+# Expanso Features Demonstrated:
+# - Complex business rule validation in Bloblang
+# - Multi-destination output (broker output)
+# - Content-based routing (switch)
+# - Priority queuing pattern
+# - Metrics/logging for rejected records
+# =============================================================================
+
+input:
+  sql_select:
+    driver: postgres
+    dsn: "postgres://${DB_USER:workshop}:${DB_PASS:workshop123}@${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:workshop}?sslmode=disable"
+    table: bad_data_workshop.sales_bad_values
+    columns:
+      - sale_id
+      - product_name
+      - unit_price
+      - quantity
+      - discount_percent
+      - sale_date
+      - customer_age
+      - rating
+
+pipeline:
+  processors:
+    # Step 1: Apply business rule validations
+    - mapping: |
+        root = this
+
+        # Initialize validation tracking
+        root.validation_errors = []
+
+        # Rule 1: Price must be positive
+        root.validation_errors = if this.unit_price < 0 {
+          root.validation_errors.append("negative_price")
+        } else {
+          root.validation_errors
+        }
+
+        # Rule 2: Quantity must be positive
+        root.validation_errors = if this.quantity < 0 {
+          root.validation_errors.append("negative_quantity")
+        } else {
+          root.validation_errors
+        }
+
+        # Rule 3: Discount cannot exceed 100%
+        root.validation_errors = if this.discount_percent > 100 {
+          root.validation_errors.append("discount_over_100")
+        } else {
+          root.validation_errors
+        }
+
+        # Rule 4: Sale date cannot be in the future
+        root.validation_errors = if this.sale_date > now() {
+          root.validation_errors.append("future_date")
+        } else {
+          root.validation_errors
+        }
+
+        # Rule 5: Customer age must be reasonable (1-120)
+        root.validation_errors = if this.customer_age < 1 || this.customer_age > 120 {
+          root.validation_errors.append("invalid_age")
+        } else {
+          root.validation_errors
+        }
+
+        # Rule 6: Rating must be 1-5
+        root.validation_errors = if this.rating < 1 || this.rating > 5 {
+          root.validation_errors.append("invalid_rating")
+        } else {
+          root.validation_errors
+        }
+
+        # Overall validation status
+        root.is_valid = root.validation_errors.length() == 0
+
+        # Severity classification for routing
+        root.severity = if root.validation_errors.length() == 0 {
+          "none"
+        } else if root.validation_errors.length() == 1 {
+          "low"
+        } else if root.validation_errors.length() <= 3 {
+          "medium"
+        } else {
+          "high"
+        }
+
+output:
+  # Multi-destination broker - routes to different outputs
+  broker:
+    pattern: fan_out
+    outputs:
+      # Destination 1: Valid records to clean table
+      - switch:
+          - check: this.is_valid == true
+            output:
+              sql_insert:
+                driver: postgres
+                dsn: "postgres://${DB_USER:workshop}:${DB_PASS:workshop123}@${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:workshop}?sslmode=disable"
+                table: bad_data_workshop_clean.sales_validated
+                columns:
+                  - sale_id
+                  - product_name
+                  - unit_price
+                  - quantity
+                  - discount_percent
+                  - sale_date
+                  - customer_age
+                  - rating
+                args_mapping: |
+                  root = [
+                    this.sale_id,
+                    this.product_name,
+                    this.unit_price,
+                    this.quantity,
+                    this.discount_percent,
+                    this.sale_date,
+                    this.customer_age,
+                    this.rating
+                  ]
+
+      # Destination 2: Invalid records to rejection table (with priority routing)
+      - switch:
+          # High severity - needs immediate attention
+          - check: this.severity == "high"
+            output:
+              sql_insert:
+                driver: postgres
+                dsn: "postgres://${DB_USER:workshop}:${DB_PASS:workshop123}@${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:workshop}?sslmode=disable"
+                table: bad_data_workshop_rejected.sales_high_priority
+                columns:
+                  - sale_id
+                  - original_data
+                  - validation_errors
+                  - severity
+                  - rejected_at
+                args_mapping: |
+                  root = [
+                    this.sale_id,
+                    this.format_json(),
+                    this.validation_errors.join(","),
+                    this.severity,
+                    now()
+                  ]
+
+          # Low/Medium severity - batch review queue
+          - check: this.severity == "low" || this.severity == "medium"
+            output:
+              sql_insert:
+                driver: postgres
+                dsn: "postgres://${DB_USER:workshop}:${DB_PASS:workshop123}@${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:workshop}?sslmode=disable"
+                table: bad_data_workshop_rejected.sales_review_queue
+                columns:
+                  - sale_id
+                  - original_data
+                  - validation_errors
+                  - severity
+                  - rejected_at
+                args_mapping: |
+                  root = [
+                    this.sale_id,
+                    this.format_json(),
+                    this.validation_errors.join(","),
+                    this.severity,
+                    now()
+                  ]

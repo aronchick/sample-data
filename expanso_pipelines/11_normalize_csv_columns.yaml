@@ -1,0 +1,143 @@
+# =============================================================================
+# Pipeline: Normalize CSV Columns (Fix 1NF Violation)
+# =============================================================================
+# Problem: Multi-valued attributes stored as comma-separated strings
+# Solution: Split CSV values into proper junction/relationship tables
+#
+# Expanso Features Demonstrated:
+# - unarchive processor (explode arrays to messages)
+# - Bloblang split() for parsing CSV
+# - Creating normalized relational structure
+# - Fan-out to multiple tables
+# =============================================================================
+
+input:
+  sql_select:
+    driver: postgres
+    dsn: "postgres://${DB_USER:workshop}:${DB_PASS:workshop123}@${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:workshop}?sslmode=disable"
+    table: bad_data_workshop.articles_csv_tags
+    columns:
+      - article_id
+      - title
+      - author
+      - tags
+      - categories
+      - related_ids
+
+pipeline:
+  processors:
+    # Step 1: Parse CSV strings into arrays
+    - mapping: |
+        root.article_id = this.article_id
+        root.title = this.title
+        root.author = this.author
+
+        # Split comma-separated values into arrays
+        root.tags_array = if this.tags != "" && this.tags != null {
+          this.tags.split(",").map_each(t -> t.trim())
+        } else {
+          []
+        }
+
+        root.categories_array = if this.categories != "" && this.categories != null {
+          this.categories.split(",").map_each(c -> c.trim())
+        } else {
+          []
+        }
+
+        root.related_ids_array = if this.related_ids != "" && this.related_ids != null {
+          this.related_ids.split(",").map_each(id -> id.trim().number().catch(0))
+        } else {
+          []
+        }
+
+output:
+  broker:
+    pattern: fan_out
+    outputs:
+      # Output 1: Clean articles table (without CSV columns)
+      - sql_insert:
+          driver: postgres
+          dsn: "postgres://${DB_USER:workshop}:${DB_PASS:workshop123}@${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:workshop}?sslmode=disable"
+          table: bad_data_workshop_clean.articles
+          columns:
+            - article_id
+            - title
+            - author
+          args_mapping: |
+            root = [
+              this.article_id,
+              this.title,
+              this.author
+            ]
+
+      # Output 2: Article-Tags junction table (exploded)
+      - mapping: |
+          # Create array of article-tag pairs
+          root = this.tags_array.map_each(tag -> {
+            "article_id": this.article_id,
+            "tag": tag
+          })
+        processors:
+          # Explode array into individual messages
+          - unarchive:
+              format: json_array
+        output:
+          sql_insert:
+            driver: postgres
+            dsn: "postgres://${DB_USER:workshop}:${DB_PASS:workshop123}@${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:workshop}?sslmode=disable"
+            table: bad_data_workshop_clean.article_tags
+            columns:
+              - article_id
+              - tag
+            args_mapping: |
+              root = [
+                this.article_id,
+                this.tag
+              ]
+
+      # Output 3: Article-Categories junction table (exploded)
+      - mapping: |
+          root = this.categories_array.map_each(cat -> {
+            "article_id": this.article_id,
+            "category": cat
+          })
+        processors:
+          - unarchive:
+              format: json_array
+        output:
+          sql_insert:
+            driver: postgres
+            dsn: "postgres://${DB_USER:workshop}:${DB_PASS:workshop123}@${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:workshop}?sslmode=disable"
+            table: bad_data_workshop_clean.article_categories
+            columns:
+              - article_id
+              - category
+            args_mapping: |
+              root = [
+                this.article_id,
+                this.category
+              ]
+
+      # Output 4: Related articles junction table (exploded)
+      - mapping: |
+          root = this.related_ids_array.filter(id -> id > 0).map_each(related_id -> {
+            "article_id": this.article_id,
+            "related_article_id": related_id
+          })
+        processors:
+          - unarchive:
+              format: json_array
+        output:
+          sql_insert:
+            driver: postgres
+            dsn: "postgres://${DB_USER:workshop}:${DB_PASS:workshop123}@${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:workshop}?sslmode=disable"
+            table: bad_data_workshop_clean.article_relations
+            columns:
+              - article_id
+              - related_article_id
+            args_mapping: |
+              root = [
+                this.article_id,
+                this.related_article_id
+              ]

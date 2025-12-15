@@ -1,0 +1,106 @@
+# =============================================================================
+# Pipeline: Validate Email Formats (Schema Enforcement)
+# =============================================================================
+# Problem: Email field contains invalid formats (no @, no domain, etc.)
+# Solution: Use Bloblang regex validation to enforce email schema
+#
+# Expanso Features Demonstrated:
+# - mapping with regex validation (schema enforcement)
+# - switch for content-based routing
+# - multi-destination output (valid + invalid routing)
+# - fan-out pattern for analytics
+# =============================================================================
+
+input:
+  sql_select:
+    driver: postgres
+    dsn: "postgres://${DB_USER:workshop}:${DB_PASS:workshop123}@${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:workshop}?sslmode=disable"
+    table: bad_data_workshop.subscribers_bad_emails
+    columns:
+      - subscriber_id
+      - name
+      - email
+      - subscribed_at
+
+pipeline:
+  processors:
+    # Step 1: Validate email format using regex
+    - mapping: |
+        root = this
+
+        # RFC 5322 simplified email regex
+        let email_regex = "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$"
+
+        # Check if email is valid
+        root.email_valid = this.email.re_match($email_regex)
+
+        # Also check for common invalid patterns
+        root.is_empty = this.email == "" || this.email == null
+        root.is_placeholder = this.email.lowercase().re_match("^(n/a|none|null|-|test)$")
+
+        # Final validation status
+        root.is_valid = root.email_valid && !root.is_empty && !root.is_placeholder
+
+        # Capture rejection reason for invalid emails
+        root.rejection_reason = if root.is_empty {
+          "Email is empty or null"
+        } else if root.is_placeholder {
+          "Email is a placeholder value"
+        } else if !root.email_valid {
+          "Email does not match valid format pattern"
+        } else {
+          ""
+        }
+
+    # Step 2: Normalize valid emails (lowercase, trim)
+    - mapping: |
+        root = this
+        root.email = if this.is_valid {
+          this.email.lowercase().trim()
+        } else {
+          this.email
+        }
+
+output:
+  # Fan-out to multiple destinations based on validity
+  switch:
+    # Valid emails go to clean subscribers table
+    - check: this.is_valid == true
+      output:
+        sql_insert:
+          driver: postgres
+          dsn: "postgres://${DB_USER:workshop}:${DB_PASS:workshop123}@${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:workshop}?sslmode=disable"
+          table: bad_data_workshop_clean.subscribers_valid
+          columns:
+            - subscriber_id
+            - name
+            - email
+            - subscribed_at
+          args_mapping: |
+            root = [
+              this.subscriber_id,
+              this.name,
+              this.email,
+              this.subscribed_at
+            ]
+
+    # Invalid emails go to rejected table for review
+    - output:
+        sql_insert:
+          driver: postgres
+          dsn: "postgres://${DB_USER:workshop}:${DB_PASS:workshop123}@${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:workshop}?sslmode=disable"
+          table: bad_data_workshop_rejected.subscribers_invalid_emails
+          columns:
+            - subscriber_id
+            - name
+            - original_email
+            - rejection_reason
+            - rejected_at
+          args_mapping: |
+            root = [
+              this.subscriber_id,
+              this.name,
+              this.email,
+              this.rejection_reason,
+              now()
+            ]
